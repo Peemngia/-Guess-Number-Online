@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎮 Guess Number Online - Game</title>
+
+<style>
+body{
+  margin:0;
+  min-height:100vh;
+  background:#0b0b0b;
+  color:white;
+  font-family:sans-serif;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+.card{
+  width:95%;
+  max-width:450px;
+  background:#111;
+  padding:20px;
+  border-radius:16px;
+  box-shadow:0 0 25px #00ffff55;
+}
+h2{color:#00ffff;margin-top:0}
+input,button{
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  border:none;
+  border-radius:10px;
+  font-size:16px;
+}
+button{font-weight:bold;cursor:pointer}
+.green{background:#00ff88;color:#000}
+.blue{background:#00ffff;color:#000}
+.red{background:#ff4444;color:#fff} 
+.box{
+  background:#000;
+  padding:10px;
+  border-radius:10px;
+  margin-top:10px;
+  max-height:120px;
+  overflow:auto;
+}
+hr{border:0;border-top:1px solid #333;margin:15px 0}
+
+#inviteBtn{
+    background: #4444ff;
+    color: white;
+    margin-bottom: 5px;
+}
+#exitBtn {
+    background: #ffaa00; 
+    color: #000;
+    margin-bottom: 5px;
+}
+#playerCount {
+    text-align: right;
+    font-size: 14px;
+    opacity: 0.8;
+    margin-top: -10px;
+}
+#result {
+    font-weight: bold;
+    color: #ffaa00;
+    margin: 10px 0;
+}
+#newGameBtn {
+    background: #20b2aa;
+    color: white;
+    display: none;
+}
+#loading {
+    text-align: center;
+    padding: 50px 0;
+    font-size: 1.2em;
+    color: #00ffff;
+}
+</style>
+</head>
+
+<body>
+<div class="card">
+
+<h2>🎮 Game: <span id="roomNameDisplay">...</span></h2>
+
+<div id="loading">กำลังโหลดห้อง...</div>
+
+<div id="game" style="display:none;">
+  <div id="playerCount">👤 0 คน</div> 
+  <p id="guessInfo">ทายเลข 1 - 100</p>
+  <input id="guess" type="number">
+  <button id="guessBtn">เดา</button>
+  <div id="result"></div>
+  
+  <button id="inviteBtn">🔗 คัดลอกลิงก์เชิญ</button>
+  <button id="exitBtn" class="red">🚪 ออกจากห้อง</button>
+  <button id="newGameBtn">🎉 เริ่มเกมใหม่</button>
+  <hr>
+
+  <b>💬 แชท</b>
+  <div class="box" id="chat"></div>
+  <input id="msg">
+  <button id="sendBtn">ส่ง</button>
+
+  <hr>
+
+  <b>👥 ผู้เล่นในห้อง</b>
+  <div class="box" id="playerList"></div> 
+  <hr>
+
+  <b>🏆 คะแนนรอบ (2 ใน 3 ชนะ)</b>
+  <div class="box" id="winScore"></div>
+  <hr>
+  <b>🏅 สถิติรอบนี้</b>
+  <div class="box" id="score"></div>
+</div>
+
+</div>
+
+<audio id="clickSound" src="computer-mouse-click-352734.mp3" preload="auto"></audio> 
+<audio id="guessSound" src="guess.mp3" preload="auto"></audio>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, get, push, onValue, update, remove }
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+// *** Firebase Config ที่ถูกต้องของคุณ ***
+const firebaseConfig = {
+  apiKey: "AIzaSyDRlB6q1NJeSnO4JsLQcUHr28XGKo573sk",
+  authDomain: "peem-dc962.firebaseapp.com",
+  databaseURL: "https://peem-dc962-default-rtdb.firebaseio.com",
+  projectId: "peem-dc962",
+  storageBucket: "peem-dc962.firebasestorage.app",
+  messagingSenderId: "1021248731842",
+  appId: "1:1021248731842:web:155602dc9d8b2b2b78595b",
+  measurementId: "G-WLK08GX4EL"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// *** ตั้งค่าจำนวนครั้งที่เดาสูงสุด และ จำนวนรอบที่ชนะ ***
+const MAX_GUESSES = 10; 
+const ROUNDS_TO_WIN = 2; 
+
+// Sound Functions
+function playClick() {
+    document.getElementById("clickSound").currentTime = 0;
+    document.getElementById("clickSound").play().catch(e => console.log("Sound play failed:", e));
+}
+function playGuessSound() {
+    document.getElementById("guessSound").currentTime = 0;
+    document.getElementById("guessSound").play().catch(e => console.log("Sound play failed:", e));
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+
+let player="", room="", hasGuessed=false, guessCount=0, minRange=1, maxRange=100;
+
+const gameDiv   = document.getElementById("game");
+const loadingDiv = document.getElementById("loading");
+const roomNameDisplay = document.getElementById("roomNameDisplay");
+const result = document.getElementById("result"); 
+const guessI = document.getElementById("guess");
+const guessBtn = document.getElementById("guessBtn");
+const chat = document.getElementById("chat");
+const msgI = document.getElementById("msg");
+const sendBtn = document.getElementById("sendBtn");
+const score = document.getElementById("score");
+const winScoreDiv = document.getElementById("winScore");
+const inviteBtn = document.getElementById("inviteBtn"); 
+const exitBtn = document.getElementById("exitBtn");
+const playerCountDiv = document.getElementById("playerCount");
+const guessInfoDiv = document.getElementById("guessInfo");
+const newGameBtn = document.getElementById("newGameBtn");
+const playerListDiv = document.getElementById("playerList");
+
+
+function getUrlParams(){
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get('room');
+    const playerParam = urlParams.get('player');
+
+    if(!roomParam || !playerParam){
+        alert("ไม่พบข้อมูลห้องหรือผู้เล่น กรุณาเข้าห้องจากหน้า Lobby");
+        window.location.href = `index.html`;
+        return false;
+    }
+
+    room = roomParam;
+    player = playerParam;
+    roomNameDisplay.innerText = room;
+    loadingDiv.style.display = 'none';
+    gameDiv.style.display = 'block';
+
+    get(ref(db, `rooms/${room}/players/${player}`)).then(snap => {
+        if(!snap.exists()){
+             alert("ชื่อผู้เล่นหรือห้องไม่ถูกต้องหรือไม่พบในระบบแล้ว");
+             window.location.href = `index.html`;
+             return;
+        }
+        resetLocalState();
+        listen();
+    });
+}
+getUrlParams();
+
+function resetLocalState(){
+    hasGuessed=false;
+    guessCount=0;
+    minRange=1;
+    maxRange=100;
+    result.innerText = "เลขใหม่ถูกสุ่มแล้ว!";
+    updateGuessInfo();
+    newGameBtn.style.display = "none";
+}
+
+async function resetFullGame(){
+    playClick();
+    if(!confirm("แน่ใจนะว่าจะเริ่มเกมใหม่ทั้งหมด (ลบสถิติรอบชนะ)?")) return;
+    
+    const roomRef = ref(db,"rooms/"+room);
+    const hostName = (await get(ref(db, `rooms/${room}/host`))).val();
+    
+    if(player !== hostName) {
+        return alert("คุณไม่ใช่หัวห้อง! เริ่มเกมใหม่ไม่ได้นะ");
+    }
+
+    await remove(ref(db, `rooms/${room}/winStats`));
+    
+    const newAnswer = Math.floor(Math.random()*100)+1;
+    await update(roomRef, {
+        answer: newAnswer,
+        score: null, 
+        guessedNumbers: null 
+    });
+    
+    push(ref(db,"rooms/"+room+"/chat"),{n:"SERVER",m:"🎊 เกมใหม่เริ่มแล้ว! สถิติการชนะถูกรีเซ็ต"});
+}
+
+async function exitGame(isKicked = false){
+  
+  if(room && player){
+    await remove(ref(db, `rooms/${room}/players/${player}`));
+    await remove(ref(db, `playersOnline/${player}`));
+  }
+  
+  let redirectUrl = `index.html`;
+  if(isKicked){
+      redirectUrl += `?kicked=true`;
+  } else {
+      redirectUrl += `?exit=true`;
+  }
+
+  window.history.replaceState({}, document.title, window.location.pathname);
+  
+  window.location.href = redirectUrl;
+}
+
+async function handleKick(kickedPlayerName){
+    playClick();
+    if (player !== (await get(ref(db, `rooms/${room}/host`))).val()) {
+        return alert("คุณไม่ใช่หัวห้อง! เตะไม่ได้นะ");
+    }
+    
+    if(kickedPlayerName === player) {
+        return alert("จะเตะตัวเองทำไม");
+    }
+
+    if (confirm(`คุณต้องการเตะ ${kickedPlayerName} ออกจากห้องหรือไม่?`)){
+        await remove(ref(db, `rooms/${room}/players/${kickedPlayerName}`));
+        await remove(ref(db, `playersOnline/${kickedPlayerName}`));
+
+        push(ref(db,"rooms/"+room+"/chat"),{n:"SERVER",m:`หัวห้องเตะ ${kickedPlayerName} ออกจากห้องแล้ว!`});
+    }
+}
+window.handleKick = handleKick; 
+
+
+/* 🎯 เดาเลข */
+async function guessNum(){
+  playGuessSound(); 
+  
+  if(hasGuessed) return alert("คุณเดาถูกไปแล้ว! รอเลขใหม่ถูกสุ่ม หรือให้แอดมินรีเซ็ตเลข");
+  
+  const g = Number(guessI.value);
+
+  if (isNaN(g) || g < 1 || g > 100) return alert("ใส่เลข 1 - 100 ให้ถูกดิ");
+  
+  const roomRef = ref(db,"rooms/"+room);
+  const roomSnap = await get(roomRef);
+  const guessedNumbers = roomSnap.val().guessedNumbers || {};
+
+  if (guessedNumbers[g]) {
+      return alert(`เลข ${g} ถูกเดาไปแล้วในรอบนี้! กรุณาเดาเลขอื่น`);
+  }
+  
+  if(guessCount >= MAX_GUESSES){
+      return alert(`คุณเดาครบ ${MAX_GUESSES} ครั้งแล้ว! ลองใหม่เกมหน้า หรือรอเลขใหม่ถูกสุ่ม`);
+  }
+
+  guessCount++; 
+
+  await update(roomRef, { 
+      ['guessedNumbers/' + g]: true 
+  });
+  
+  const a = roomSnap.val().answer; 
+  let message = ""; 
+
+  if(g > a){
+    result.innerText="มากไป";
+    maxRange = Math.min(maxRange, g - 1);
+    message = `เดา ${g} ➡️ [มากกว่า]`;
+  }
+  else if(g < a){
+    result.innerText="น้อยไป";
+    minRange = Math.max(minRange, g + 1);
+    message = `เดา ${g} ⬅️ [น้อยกว่า]`;
+  }
+  else{
+    const winStatsRef = ref(db,`rooms/${room}/winStats/${player}`);
+    
+    await set(ref(db,"rooms/"+room+"/score/"+player), Date.now()%100000);
+
+    const currentWins = (await get(winStatsRef)).val() || 0;
+    const newWins = currentWins + 1;
+    await set(winStatsRef, newWins);
+
+    result.innerText=`ถูกแล้ว 🎉 (ใช้ไป ${guessCount} ครั้ง)`;
+    hasGuessed = true; 
+    
+    if(newWins >= ROUNDS_TO_WIN){
+        message = `👑 ชนะเกมทั้งหมด ${newWins} รอบ! เกมจบแล้ว! 🏆`;
+        push(ref(db,"rooms/"+room+"/chat"),{n:"SERVER",m:`${player} ${message}`});
+        
+        newGameBtn.style.display = "block";
+        guessBtn.disabled = true;
+        guessI.disabled = true;
+        result.innerText = `👑 ${player} ชนะเกม! (${newWins}/${ROUNDS_TO_WIN} รอบ)`;
+        
+    } else {
+        const newAnswer = Math.floor(Math.random()*100)+1; 
+        
+        await update(roomRef, {
+            answer: newAnswer,
+            score: null,
+            guessedNumbers: null 
+        });
+        
+        message = `ชนะรอบนี้ (${newWins}/${ROUNDS_TO_WIN}) - เริ่มรอบใหม่ เลขสุ่มแล้ว!`;
+        push(ref(db,"rooms/"+room+"/chat"),{n:"SERVER",m:`${player} ${message}`});
+        
+        // Reset local state for next round start
+        resetLocalState();
+        result.innerText = `ถูกแล้ว! เริ่มรอบ ${newWins + 1}`;
+    }
+  }
+
+  if (message && !hasGuessed) {
+     push(ref(db,"rooms/"+room+"/chat"),{n:player,m: message});
+  }
+
+  updateGuessInfo();
+  guessI.value = "";
+}
+
+function updateGuessInfo(){
+    const remaining = MAX_GUESSES - guessCount;
+    guessInfoDiv.innerHTML = `ทายเลข <b>${minRange}</b> ถึง <b>${maxRange}</b><br> (${remaining > 0 ? remaining : 0} ครั้งที่เหลือ)`;
+    
+    if(guessCount >= MAX_GUESSES && !hasGuessed){
+        guessInfoDiv.innerHTML += `<br><span style="color:#ff4444;">หมดโอกาสเดาแล้ว!</span>`;
+        guessBtn.disabled = true;
+        guessI.disabled = true;
+    } else if (hasGuessed && newGameBtn.style.display === "none") {
+        guessInfoDiv.innerHTML = `✅ คุณเดาถูกแล้ว! รอเลขใหม่ถูกสุ่ม...`;
+        guessBtn.disabled = true;
+        guessI.disabled = true;
+    } else if (newGameBtn.style.display !== "none") {
+        guessInfoDiv.innerHTML = `✅ เกมจบแล้ว!`;
+        guessBtn.disabled = true;
+        guessI.disabled = true;
+    } else {
+        guessBtn.disabled = false;
+        guessI.disabled = false;
+    }
+}
+
+function sendMsg(){
+  playClick(); 
+  const m = msgI.value.trim();
+  if(!m) return;
+  push(ref(db,"rooms/"+room+"/chat"),{n:player,m});
+  msgI.value="";
+}
+
+function copyInviteLink(){
+    playClick(); 
+    const link = `${window.location.protocol}//${window.location.host}/index.html?room=${room}`;
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(link)
+            .then(() => alert(`คัดลอกลิงก์เชิญสำเร็จ: ${link}`))
+            .catch(err => alert('ไม่สามารถคัดลอกได้: ' + err));
+    } else {
+        alert("ไม่รองรับการคัดลอกอัตโนมัติ: กรุณาคัดลอกด้วยตนเองจาก URL");
+    }
+}
+
+
+/* 📡 ฟังข้อมูล */
+function listen(){
+  // 1. ฟังแชท
+  onValue(ref(db,"rooms/"+room+"/chat"), snap=>{
+    chat.innerHTML="";
+    let messages = [];
+    snap?.forEach(c=>{
+      messages.push(`<div><b>${c.val().n}</b>: ${c.val().m}</div>`);
+    });
+    chat.innerHTML = messages.join("");
+    chat.scrollTop = chat.scrollHeight;
+  });
+
+  // 2. ฟังคะแนนรอบนี้ (score)
+  onValue(ref(db,"rooms/"+room+"/score"), snap=>{
+    if(!snap.exists()){
+      if(gameDiv.style.display==="block") {
+        resetLocalState();
+      }
+      return;
+    }
+    
+    score.innerHTML="";
+    let scores = [];
+    snap?.forEach(s=>{
+      scores.push({name: s.key, score: s.val()});
+    });
+    scores.sort((a,b) => a.score - b.score);
+    
+    scores.forEach(s => {
+      score.innerHTML+=`<div>🏆 ${s.name}: ${s.score}</div>`;
+    });
+  });
+
+  // 3. ฟังคะแนนรอบชนะ (winStats)
+  onValue(ref(db,"rooms/"+room+"/winStats"), snap=>{
+    winScoreDiv.innerHTML="";
+    if(!snap.exists()) {
+        winScoreDiv.innerHTML = '<div>ยังไม่มีใครชนะรอบ</div>';
+        return;
+    }
+    
+    let winStats = [];
+    let isGameOver = false;
+
+    snap?.forEach(s=>{
+      const playerName = s.key;
+      const wins = s.val();
+      winStats.push(`<div>${playerName}: ${wins}/${ROUNDS_TO_WIN} รอบ</div>`);
+      if(wins >= ROUNDS_TO_WIN) {
+          isGameOver = true;
+      }
+    });
+
+    winScoreDiv.innerHTML = winStats.join("");
+    
+    if(isGameOver) {
+        newGameBtn.style.display = "block";
+        guessBtn.disabled = true;
+        guessI.disabled = true;
+        result.innerText = `👑 เกมจบแล้ว! มีผู้ชนะ ${ROUNDS_TO_WIN} รอบ!`;
+        guessInfoDiv.innerHTML = `✅ เกมจบแล้ว!`;
+    } else {
+        if(gameDiv.style.display === "block" && !hasGuessed) {
+            newGameBtn.style.display = "none";
+        }
+    }
+  });
+
+
+  // 4. ฟังข้อมูลห้องทั้งหมดเพื่อแสดงรายการผู้เล่นและปุ่มเตะ
+  onValue(ref(db,"rooms/"+room), async snap=>{
+    if(!snap.exists()){
+        exitGame(true);
+        return;
+    }
+
+    const roomData = snap.val();
+    const playersObj = roomData?.players || {};
+    const hostName = roomData?.host || "";
+    const isHost = player === hostName;
+    const count = Object.keys(playersObj).length;
+    
+    playerCountDiv.innerText = `👤 ${count} คน`;
+    
+    let playerListHTML = "";
+    let isStillInRoom = false;
+    for (const pName in playersObj) {
+        let kickButton = '';
+        if (isHost && pName !== player) {
+            kickButton = `<button style="background:#ff4444; color:white; padding: 3px 6px; border-radius: 5px; font-size: 12px; margin-left: 10px;" onclick="window.handleKick('${pName}')">เตะ</button>`;
+        }
+        
+        if (pName === player) isStillInRoom = true;
+
+        let hostTag = pName === hostName ? ' 👑 (หัวห้อง)' : '';
+        let selfTag = pName === player ? ' (คุณ)' : '';
+
+        playerListHTML += `<div style="display: flex; justify-content: space-between; align-items: center; padding: 5px 0;"><span>${pName}${hostTag}${selfTag}</span>${kickButton}</div>`;
+    }
+    playerListDiv.innerHTML = playerListHTML;
+
+    if (!isStillInRoom && gameDiv.style.display==="block") {
+      exitGame(true);
+    }
+  });
+}
+
+/* 🔘 ผูกปุ่ม */
+guessBtn.onclick  = guessNum;
+sendBtn.onclick   = sendMsg;
+inviteBtn.onclick = copyInviteLink;
+exitBtn.onclick = () => {
+    playClick(); 
+    exitGame(false);
+};
+newGameBtn.onclick = resetFullGame;
+
+});
+</script>
+
+</body>
+</html>

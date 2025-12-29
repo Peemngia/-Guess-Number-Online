@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>👑 Admin Panel</title>
+
+<style>
+*{box-sizing:border-box;font-family:sans-serif}
+body{
+  margin:0;
+  min-height:100vh;
+  background:radial-gradient(circle at top,#111,#000);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  color:white;
+}
+.card{
+  width:95%;
+  max-width:440px;
+  background:rgba(255,255,255,0.06);
+  padding:25px;
+  border-radius:20px;
+  box-shadow:0 0 30px #00ffff55;
+  text-align:center;
+}
+h1{color:#00ffff;margin-top:0}
+input,button{
+  width:100%;
+  padding:14px;
+  margin-top:10px;
+  border-radius:12px;
+  border:none;
+  font-size:16px;
+}
+button{
+  font-weight:bold;
+  cursor:pointer;
+  position:relative;
+  z-index:10;
+}
+.green{background:#00ff88;color:#000}
+.red{background:#ff4444;color:#fff}
+.blue{background:#00ffff;color:#000}
+.gray{background:#666;color:#fff}
+.box{
+  background:#000;
+  border-radius:10px;
+  padding:10px;
+  margin-top:10px;
+  max-height:120px;
+  overflow:auto;
+  text-align:left;
+  font-size:14px;
+}
+.status{margin-top:10px;font-size:14px;opacity:0.85}
+.hidden{display:none}
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+<h1>👑 ADMIN PANEL</h1>
+
+<div id="login">
+  <input id="adminPass" placeholder="รหัสแอดมิน">
+  <button class="blue" id="loginBtn">เข้าแอดมิน</button>
+</div>
+
+<div id="panel" class="hidden">
+
+  <hr>
+  <b>👢 เตะผู้เล่นทั่วโลก (Global Kick - ค้นหาไว)</b>
+  <input id="kickPlayerInput" placeholder="ชื่อผู้เล่นที่ต้องการเตะ">
+  <button class="red" id="kickPlayerBtn">ค้นหา & เตะผู้เล่น</button>
+  <div class="status" id="kickStatus"></div>
+  
+  <hr>
+  <b>⚙️ จัดการห้องเฉพาะ</b>
+  <input id="targetRoomInput" placeholder="ชื่อห้องที่ต้องการจัดการ">
+  <button class="blue" id="viewRoomBtn">ดูรายละเอียดห้อง (คำตอบ, Host, สถิติ)</button>
+  <div id="roomDetails" class="box" style="height: auto; max-height: none;">ใส่ชื่อห้องและกด "ดูรายละเอียดห้อง"</div>
+  
+  <hr>
+  <input id="newAnswerInput" type="number" placeholder="เลขที่ซ่อนใหม่ (1-100)">
+  <button class="green" id="changeAnswerBtn">เปลี่ยนเลขที่ซ่อน & รีเซ็ตรอบ</button>
+  
+  <input id="playerToKickFromRoom" placeholder="ชื่อผู้เล่นที่จะเตะออกจากห้องนี้">
+  <button class="red" id="kickSpecificPlayerBtn">เตะผู้เล่นจากห้องนี้โดยเฉพาะ</button>
+  
+  <button class="red" id="deleteRoomBtn">❌ ลบห้องนี้ถาวร</button>
+  
+  <hr>
+
+  <div class="status" id="timer">⏳ โหลดเวลารีเซิร์ฟ...</div>
+  <button class="green" id="onBtn">เปิด Auto Reset</button>
+  <button class="gray"  id="offBtn">ปิด Auto Reset</button>
+  <button class="red"   id="resetBtn">รีเซิร์ฟทั้งหมดทันที</button>
+
+  <hr>
+
+  <b>👥 ห้องที่ออนไลน์ทั้งหมด</b>
+  <div class="box" id="rooms">กำลังโหลด...</div>
+
+</div>
+
+</div>
+
+<audio id="clickSound" src="computer-mouse-click-352734.mp3" preload="auto"></audio> 
+
+<script type="module">
+import { initializeApp } from
+"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, get, remove, onValue, update, push }
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+/* 🔥 ตั้งรหัสแอดมิน (เปลี่ยนรหัสนี้ด้วย!) */
+const ADMIN_PASSWORD = "1234";
+
+/* 🔥 firebase config (เปลี่ยนของมึงเอง!) */
+const firebaseConfig = {
+  apiKey: "API_KEY_ของมึง",
+  authDomain: "PROJECT.firebaseapp.com",
+  databaseURL: "https://PROJECT-default-rtdb.firebaseio.com",
+  projectId: "PROJECT"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+// New DOM elements
+const targetRoomInput = document.getElementById("targetRoomInput");
+const kickPlayerInput = document.getElementById("kickPlayerInput");
+const kickStatusDiv = document.getElementById("kickStatus");
+const roomDetailsDiv = document.getElementById("roomDetails");
+const newAnswerInput = document.getElementById("newAnswerInput");
+const playerToKickFromRoom = document.getElementById("playerToKickFromRoom");
+
+/* Sound Function */
+function playClick() {
+    const audio = document.getElementById("clickSound");
+    audio.currentTime = 0;
+    audio.play().catch(e => console.log("Sound play failed:", e)); 
+}
+
+
+/* ========================
+   ⚙️ ROOM MANAGEMENT FUNCTIONS
+======================== */
+
+// Helper: ตรวจสอบห้อง
+async function checkRoom(roomKey) {
+    const snap = await get(ref(db, "rooms/" + roomKey));
+    return snap.exists() ? snap.val() : null;
+}
+
+// 1. ดูรายละเอียดห้อง (รวมถึงเลขที่ซ่อน)
+async function getRoomDetails() {
+    playClick();
+    const roomKey = targetRoomInput.value.trim();
+    if (!roomKey) return roomDetailsDiv.innerHTML = "กรุณาใส่ชื่อห้อง";
+
+    roomDetailsDiv.innerHTML = "กำลังโหลด...";
+    const roomData = await checkRoom(roomKey);
+
+    if (!roomData) {
+        return roomDetailsDiv.innerHTML = `ไม่พบห้อง <b>${roomKey}</b>`;
+    }
+    
+    const playersCount = roomData.players ? Object.keys(roomData.players).length : 0;
+    const guessedCount = roomData.guessedNumbers ? Object.keys(roomData.guessedNumbers).length : 0;
+    const guessedNumbersList = roomData.guessedNumbers ? Object.keys(roomData.guessedNumbers).join(', ') : 'ยังไม่มี';
+    const winStats = roomData.winStats ? JSON.stringify(roomData.winStats, null, 2) : 'ไม่มี';
+
+    let html = `<div style="padding: 5px;"><b>ห้อง: ${roomKey}</b></div>`;
+    html += `<div>ผู้เล่น: 👤 ${playersCount} คน</div>`;
+    html += `<div>หัวห้อง: 👑 ${roomData.host}</div>`;
+    html += `<div style="color: #00ff88; font-weight: bold;">เลขที่ซ่อน: ${roomData.answer}</div>`;
+    html += `<div>เลขที่เดาแล้ว (${guessedCount}): ${guessedNumbersList}</div>`;
+    html += `<div>สถิติชนะ: <pre style="margin: 0; white-space: pre-wrap; font-size: 12px;">${winStats}</pre></div>`;
+    
+    roomDetailsDiv.innerHTML = html;
+}
+
+// 2. ลบห้องเฉพาะเจาะจง
+async function deleteSpecificRoom() {
+    playClick();
+    const roomKey = targetRoomInput.value.trim();
+    if (!roomKey) return alert("กรุณาใส่ชื่อห้อง");
+    if (!confirm(`แน่ใจนะว่าจะลบห้อง ${roomKey} ทั้งหมด? การกระทำนี้ไม่สามารถยกเลิกได้!`)) return;
+
+    const roomData = await checkRoom(roomKey);
+    if (!roomData) return alert(`ไม่พบห้อง ${roomKey} จึงลบไม่ได้`);
+
+    await remove(ref(db, "rooms/" + roomKey));
+    alert(`ห้อง ${roomKey} ถูกลบแล้ว`);
+    roomDetailsDiv.innerHTML = "ห้องถูกลบ";
+}
+
+// 3. เปลี่ยนเลขที่ซ่อนและรีเซ็ตรอบ
+async function setNewAnswer() {
+    playClick();
+    const roomKey = targetRoomInput.value.trim();
+    const newAnswer = Number(newAnswerInput.value.trim());
+
+    if (!roomKey) return alert("กรุณาใส่ชื่อห้อง");
+    if (!newAnswer || newAnswer < 1 || newAnswer > 100) return alert("ใส่เลข 1-100 ให้ถูก");
+    if (!confirm(`แน่ใจนะว่าจะเปลี่ยนเลขที่ซ่อนของห้อง ${roomKey} เป็น ${newAnswer}? นี่จะรีเซ็ตรอบปัจจุบันด้วย`)) return;
+
+    const roomData = await checkRoom(roomKey);
+    if (!roomData) return alert(`ไม่พบห้อง ${roomKey}`);
+
+    await update(ref(db, "rooms/" + roomKey), { 
+        answer: newAnswer,
+        score: null, 
+        guessedNumbers: null 
+    });
+    push(ref(db, "rooms/" + roomKey + "/chat"), { n: "ADMIN", m: `เปลี่ยนเลขที่ซ่อนเป็น ${newAnswer} แล้ว! เริ่มรอบใหม่!` });
+    alert(`เปลี่ยนเลขที่ซ่อนของห้อง ${roomKey} เป็น ${newAnswer} แล้ว!`);
+    getRoomDetails(); 
+}
+
+// 4. เตะผู้เล่นจากห้องเฉพาะ
+async function kickPlayerFromSpecificRoom() {
+    playClick();
+    const roomKey = targetRoomInput.value.trim();
+    const playerToKick = playerToKickFromRoom.value.trim();
+
+    if (!roomKey || !playerToKick) return alert("กรุณาใส่ชื่อห้องและชื่อผู้เล่น");
+    if (!confirm(`แน่ใจนะว่าจะเตะผู้เล่น ${playerToKick} ออกจากห้อง ${roomKey}?`)) return;
+
+    const playerRef = ref(db, `rooms/${roomKey}/players/${playerToKick}`);
+    const snap = await get(playerRef);
+
+    if (!snap.exists()) return alert(`ไม่พบผู้เล่น ${playerToKick} ในห้อง ${roomKey}`);
+
+    await remove(playerRef);
+    // ลบออกจาก playersOnline ด้วย
+    await remove(ref(db, `playersOnline/${playerToKick}`));
+
+    push(ref(db, "rooms/" + roomKey + "/chat"), { n: "ADMIN", m: `เตะ ${playerToKick} ออกจากห้องแล้ว!` });
+    alert(`เตะ ${playerToKick} ออกจากห้อง ${roomKey} แล้ว`);
+    getRoomDetails(); 
+}
+
+
+/* ========================
+   👢 GLOBAL KICK FUNCTION (FAST Lookup)
+======================== */
+async function kickPlayerGlobal() {
+    playClick();
+    const playerName = kickPlayerInput.value.trim();
+    kickStatusDiv.innerHTML = "กำลังค้นหาและเตะ...";
+
+    if (!playerName) {
+        kickStatusDiv.innerHTML = "กรุณาใส่ชื่อผู้เล่น";
+        return;
+    }
+
+    try {
+        // ใช้ NEW FAST LOOKUP
+        const playerOnlineRef = ref(db, "playersOnline/" + playerName);
+        const onlineSnap = await get(playerOnlineRef);
+
+        if (onlineSnap.exists()) {
+            const { room: roomFound } = onlineSnap.val(); 
+
+            // 1. ลบผู้เล่นออกจากห้องเป้าหมาย
+            await remove(ref(db, `rooms/${roomFound}/players/${playerName}`));
+            
+            // 2. ลบดัชนีผู้เล่นออนไลน์
+            await remove(playerOnlineRef);
+
+            push(ref(db, "rooms/" + roomFound + "/chat"), { n: "ADMIN", m: `เตะ ${playerName} ออกจากห้องแล้ว (Global Kick - Fast Mode)!` });
+            kickStatusDiv.innerHTML = `✅ เตะ <b>${playerName}</b> ออกจากห้อง <b>${roomFound}</b> เรียบร้อย (ค้นหาไว!)`;
+        } else {
+            kickStatusDiv.innerHTML = `❌ ไม่พบผู้เล่น <b>${playerName}</b> ในห้องออนไลน์ใดๆ`;
+        }
+
+    } catch (error) {
+        console.error("Firebase Error (Global Kick):", error);
+        kickStatusDiv.innerHTML = 'เกิดข้อผิดพลาดในการเตะ';
+    }
+}
+
+
+/* 🔐 LOGIN */
+document.getElementById("loginBtn").addEventListener("click", ()=>{
+  playClick();
+  if(adminPass.value !== ADMIN_PASSWORD){
+    alert("รหัสผิดไอ้สัส");
+    return;
+  }
+  document.getElementById("login").style.display = "none";
+  document.getElementById("panel").classList.remove("hidden");
+  roomDetailsDiv.innerHTML = 'ใส่ชื่อห้องและกด "ดูรายละเอียดห้อง"'; 
+});
+
+/* ⏳ นับถอยหลังรีเซิร์ฟ */
+onValue(ref(db,"lastReset"), snap=>{
+  if(!snap.exists()) return;
+  setInterval(()=>{
+    const left = 30*60*1000 - (Date.now()-snap.val());
+    document.getElementById("timer").innerText =
+      left>0
+      ? "⏳ รีเซิร์ฟในอีก "+Math.floor(left/1000)+" วิ"
+      : "💥 กำลังรีเซิร์ฟ";
+  },1000);
+});
+
+/* 👥 ห้องออนไลน์ */
+onValue(ref(db,"rooms"), snap=>{
+  const box = document.getElementById("rooms");
+  box.innerHTML="";
+  if(!snap.exists()){
+    box.innerHTML="ไม่มีห้อง";
+    return;
+  }
+  snap.forEach(r=>{
+    const p = r.val().players
+      ? Object.keys(r.val().players).length
+      : 0;
+    const h = r.val().host || 'ไม่ระบุ';
+    box.innerHTML += `<div>📦 ${r.key} (👤 ${p} คน) - 👑 ${h}</div>`;
+  });
+});
+
+/* 🛠️ ปุ่มควบคุมเดิม */
+document.getElementById("onBtn")
+  .addEventListener("click",()=>{
+    playClick();
+    set(ref(db,"autoReset"),true)
+  });
+
+document.getElementById("offBtn")
+  .addEventListener("click",()=>{
+    playClick();
+    set(ref(db,"autoReset"),false)
+  });
+
+document.getElementById("resetBtn")
+  .addEventListener("click",async ()=>{
+    playClick();
+    if(!confirm("แน่ใจนะ จะรีเซิร์ฟห้องทั้งหมดจริง? การกระทำนี้ไม่สามารถยกเลิกได้!")) return;
+    
+    // ลบ playerOnline index สำหรับ Full Reset
+    await remove(ref(db,"playersOnline")); 
+
+    await remove(ref(db,"rooms"));
+    await set(ref(db,"lastReset"),Date.now());
+    await set(ref(db,"warned"),false);
+    alert("รีเซิร์ฟห้องทั้งหมดแล้ว");
+  });
+
+/* 🛠️ ปุ่มควบคุมใหม่ */
+document.getElementById("kickPlayerBtn").addEventListener("click", kickPlayerGlobal);
+document.getElementById("viewRoomBtn").addEventListener("click", getRoomDetails);
+document.getElementById("deleteRoomBtn").addEventListener("click", deleteSpecificRoom);
+document.getElementById("changeAnswerBtn").addEventListener("click", setNewAnswer);
+document.getElementById("kickSpecificPlayerBtn").addEventListener("click", kickPlayerFromSpecificRoom);
+
+</script>
+
+</body>
+</html>
