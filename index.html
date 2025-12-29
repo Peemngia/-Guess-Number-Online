@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎮 Guess Number Online - Lobby</title>
+
+<style>
+body{
+  margin:0;
+  min-height:100vh;
+  background:#0b0b0b;
+  color:white;
+  font-family:sans-serif;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+.card{
+  width:95%;
+  max-width:450px;
+  background:#111;
+  padding:20px;
+  border-radius:16px;
+  box-shadow:0 0 25px #00ffff55;
+}
+h2{color:#00ffff;margin-top:0}
+input,button{
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  border:none;
+  border-radius:10px;
+  font-size:16px;
+}
+button{font-weight:bold;cursor:pointer}
+.green{background:#00ff88;color:#000}
+.blue{background:#00ffff;color:#000}
+.red{background:#ff4444;color:#fff} 
+.box{
+  background:#000;
+  padding:10px;
+  border-radius:10px;
+  margin-top:10px;
+  max-height:120px;
+  overflow:auto;
+}
+hr{border:0;border-top:1px solid #333;margin:15px 0}
+</style>
+</head>
+
+<body>
+<div class="card">
+
+<h2>🎲 Guess Number Online</h2>
+
+<input id="name" placeholder="ชื่อผู้เล่น">
+<input id="room" placeholder="ชื่อห้อง">
+<input id="pass" placeholder="รหัสห้อง">
+
+<button id="createBtn" class="green">➕ สร้างห้อง</button>
+<button id="joinBtn" class="blue">➡️ เข้าห้อง</button>
+
+<hr>
+
+<b>🔍 ค้นหาผู้เล่น</b>
+<input id="playerSearchInput" placeholder="ชื่อผู้เล่นที่ต้องการค้นหา">
+<button id="searchPlayerBtn" class="blue">ค้นหาผู้เล่น</button>
+<div id="searchResults" class="box" style="margin-top: 5px;"></div>
+<hr>
+
+<b>🔍 ค้นหาห้อง</b>
+<input id="roomSearchInput" placeholder="ชื่อห้องที่ต้องการค้นหา">
+<button id="searchRoomBtn" class="blue">ค้นหาห้อง</button>
+<div id="roomSearchResults" class="box" style="margin-top: 5px;"></div>
+
+</div>
+
+<audio id="clickSound" src="computer-mouse-click-352734.mp3" preload="auto"></audio> 
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, get, push, update, remove }
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+// *** Firebase Config ที่ถูกต้องของคุณ ***
+const firebaseConfig = {
+  apiKey: "AIzaSyDRlB6q1NJeSnO4JsLQcUHr28XGKo573sk",
+  authDomain: "peem-dc962.firebaseapp.com",
+  databaseURL: "https://peem-dc962-default-rtdb.firebaseio.com",
+  projectId: "peem-dc962",
+  storageBucket: "peem-dc962.firebasestorage.app",
+  messagingSenderId: "1021248731842",
+  appId: "1:1021248731842:web:155602dc9d8b2b2b78595b",
+  measurementId: "G-WLK08GX4EL"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// Sound Function
+function playClick() {
+    const audio = document.getElementById("clickSound");
+    audio.currentTime = 0;
+    audio.play().catch(e => console.log("Sound play failed:", e)); 
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+
+const nameI  = document.getElementById("name");
+const roomI  = document.getElementById("room");
+const passI  = document.getElementById("pass");
+const createBtn = document.getElementById("createBtn");
+const joinBtn   = document.getElementById("joinBtn");
+const playerSearchInput = document.getElementById("playerSearchInput"); 
+const searchPlayerBtn = document.getElementById("searchPlayerBtn");   
+const searchResultsDiv = document.getElementById("searchResults");   
+const roomSearchInput = document.getElementById("roomSearchInput"); 
+const searchRoomBtn = document.getElementById("searchRoomBtn");   
+const roomSearchResultsDiv = document.getElementById("roomSearchResults"); 
+
+function checkUrlForInvite(){
+    const urlParams = new URLSearchParams(window.location.search);
+    const invitedRoom = urlParams.get('room');
+    const kickedStatus = urlParams.get('kicked');
+    const exitStatus = urlParams.get('exit');
+
+    if(invitedRoom){
+        roomI.value = invitedRoom; 
+        alert(`คุณถูกเชิญเข้าห้อง: ${invitedRoom} กรุณากรอกชื่อและรหัสห้อง`);
+    }
+    if(kickedStatus === 'true'){
+        alert("คุณถูกเตะออกจากห้อง!");
+    }
+    if(exitStatus === 'true'){
+        alert("คุณออกจากห้องแล้ว");
+    }
+}
+checkUrlForInvite();
+
+function goToGame(playerName, roomName){
+    window.location.href = `game.html?room=${roomName}&player=${playerName}`;
+}
+
+/* ➕ สร้างห้อง */
+async function createRoom(){
+  playClick(); 
+  const player = nameI.value.trim();
+  const room   = roomI.value.trim();
+  const pw = passI.value.trim();
+
+  if(!player || !room || !pw)
+    return alert("กรอกชื่อ ห้อง รหัส ให้ครบดิไอ้เหี้ย");
+
+  const roomRef = ref(db,"rooms/"+room);
+  
+  try {
+    const snap = await get(roomRef);
+
+    if(snap.exists())
+      return alert("ห้องนี้มีอยู่แล้ว");
+
+    const answer = Math.floor(Math.random()*100)+1; 
+
+    await set(roomRef,{
+      password: pw,
+      answer: answer,
+      players:{ [player]: true },
+      winStats: {},
+      guessedNumbers: {},
+      host: player 
+    });
+    
+    // บันทึกผู้เล่นออนไลน์ (สำหรับ Admin Kick)
+    await set(ref(db, "playersOnline/" + player), { room: room });
+
+    goToGame(player, room);
+
+  } catch(error) {
+    console.error("Firebase Error (Create Room):", error);
+    alert("สร้างห้องไม่สำเร็จ! ตรวจสอบ Firebase Rules หรือ Config!");
+  }
+}
+
+/* ➡️ เข้าห้อง */
+async function joinRoom(){
+  playClick(); 
+  const player = nameI.value.trim();
+  const room   = roomI.value.trim();
+  const pw = passI.value.trim();
+
+  if(!player || !room || !pw)
+    return alert("กรอกให้ครบก่อนดิ");
+
+  const roomRef = ref(db,"rooms/"+room);
+  
+  try {
+    const snap = await get(roomRef);
+
+    if(!snap.exists())
+      return alert("ยังไม่มีห้องนี้");
+
+    if(snap.val().password !== pw)
+      return alert("รหัสผิดไอ้สัส");
+
+    if(snap.val().players?.[player])
+      return alert("ชื่อซ้ำเว้ย");
+
+    await set(ref(db,"rooms/"+room+"/players/"+player), true);
+    
+    // บันทึกผู้เล่นออนไลน์ (สำหรับ Admin Kick)
+    await set(ref(db, "playersOnline/" + player), { room: room });
+
+    goToGame(player, room);
+    
+  } catch(error) {
+    console.error("Firebase Error (Join Room):", error);
+    alert("เข้าห้องไม่สำเร็จ! ตรวจสอบ Firebase Rules หรือ Config!");
+  }
+}
+
+/* 🔍 ค้นหาผู้เล่น */
+async function searchPlayer(){
+    playClick(); 
+    const searchName = playerSearchInput.value.trim().toLowerCase();
+    searchResultsDiv.innerHTML = "กำลังค้นหา...";
+
+    if (!searchName) {
+        searchResultsDiv.innerHTML = "กรุณาใส่ชื่อผู้เล่นที่ต้องการค้นหา";
+        return;
+    }
+    
+    try {
+        const roomsRef = ref(db, "rooms");
+        const snapshot = await get(roomsRef);
+        
+        let found = false;
+        let resultsHTML = '';
+        
+        if (snapshot.exists()) {
+            snapshot.forEach(roomSnap => {
+                const roomKey = roomSnap.key;
+                const roomData = roomSnap.val();
+                const players = roomData.players || {};
+                const host = roomData.host || 'ไม่ระบุ';
+
+                for (const pName in players) {
+                    if (pName.toLowerCase().includes(searchName)) { 
+                        resultsHTML += `<div>✅ พบผู้เล่น <b>${pName}</b> ในห้อง <b>${roomKey}</b> (หัวห้อง: ${host})</div>`;
+                        found = true;
+                        return; 
+                    }
+                }
+            });
+        }
+        
+        if (!found) {
+            resultsHTML = '<div>ไม่พบผู้เล่นชื่อนี้ในห้องออนไลน์ใดๆ</div>';
+        }
+        
+        searchResultsDiv.innerHTML = resultsHTML;
+
+    } catch (error) {
+        console.error("Firebase Error (Search Player):", error);
+        searchResultsDiv.innerHTML = 'เกิดข้อผิดพลาดในการค้นหา';
+    }
+}
+
+/* 🔍 ค้นหาห้อง */
+async function searchRoom(){
+    playClick(); 
+    const searchRoomName = roomSearchInput.value.trim().toLowerCase();
+    roomSearchResultsDiv.innerHTML = "กำลังค้นหา...";
+
+    if (!searchRoomName) {
+        roomSearchResultsDiv.innerHTML = "กรุณาใส่ชื่อห้องที่ต้องการค้นหา";
+        return;
+    }
+    
+    try {
+        const roomsRef = ref(db, "rooms");
+        const snapshot = await get(roomsRef);
+        
+        let found = false;
+        let resultsHTML = '';
+        
+        if (snapshot.exists()) {
+            snapshot.forEach(roomSnap => {
+                const roomKey = roomSnap.key;
+                if (roomKey.toLowerCase().includes(searchRoomName)) { 
+                    const roomData = roomSnap.val();
+                    const players = roomData.players || {};
+                    const host = roomData.host || 'ไม่ระระบุ';
+                    const playerCount = Object.keys(players).length;
+                    const passwordStatus = roomData.password ? '🔑 มีรหัส' : '🔓 ไม่มีรหัส';
+
+                    resultsHTML += `<div>📦 ห้อง <b>${roomKey}</b> — 👤 ${playerCount} คน — ${passwordStatus} — หัวห้อง: ${host}</div>`;
+                    found = true;
+                }
+            });
+        }
+        
+        if (!found) {
+            resultsHTML = '<div>ไม่พบห้องชื่อนี้ออนไลน์อยู่</div>';
+        }
+        
+        roomSearchResultsDiv.innerHTML = resultsHTML;
+
+    } catch (error) {
+        console.error("Firebase Error (Search Room):", error);
+        roomSearchResultsDiv.innerHTML = 'เกิดข้อผิดพลาดในการค้นหา';
+    }
+}
+
+
+/* 🔘 ผูกปุ่ม */
+createBtn.onclick = createRoom;
+joinBtn.onclick   = joinRoom;
+searchPlayerBtn.onclick = searchPlayer; 
+searchRoomBtn.onclick = searchRoom; 
+
+});
+</script>
+
+</body>
+</html>
