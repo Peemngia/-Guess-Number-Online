@@ -143,19 +143,24 @@ button[disabled] {
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
 import { getDatabase, ref, set, get, push, onValue, update, remove }
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// *** Firebase Config ที่ถูกต้องของคุณ (ต้องเปลี่ยน) ***
+// *** Firebase Config ที่ถูกต้องของคุณ (ถูกใส่ค่าแล้ว) ***
 const firebaseConfig = {
-  apiKey: "API_KEY_ของมึง",
-  authDomain: "PROJECT.firebaseapp.com",
-  databaseURL: "https://PROJECT-default-rtdb.firebaseio.com",
-  projectId: "PROJECT"
-  // ... (ค่าอื่นๆ)
+  apiKey: "AIzaSyDRlB6q1NJeSnO4JsLQcUHr28XGKo573sk",
+  authDomain: "peem-dc962.firebaseapp.com",
+  databaseURL: "https://peem-dc962-default-rtdb.firebaseio.com",
+  projectId: "peem-dc962",
+  storageBucket: "peem-dc962.firebasestorage.app",
+  messagingSenderId: "1021248731842",
+  appId: "1:1021248731842:web:155602dc9d8b2b2b78595b",
+  measurementId: "G-WLK08GX4EL"
 };
 
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 const db = getDatabase(app);
 
 // *** ตั้งค่าจำนวนครั้งที่เดาสูงสุด และ จำนวนรอบที่ชนะ ***
@@ -168,7 +173,6 @@ function playClick() {
     document.getElementById("clickSound").play().catch(e => console.log("Sound play failed:", e));
 }
 function playGuessSound() {
-    // ใช้เสียง guess.mp3 (หากไม่มีไฟล์นี้จริง อาจไม่มีเสียง)
     document.getElementById("guessSound").currentTime = 0;
     document.getElementById("guessSound").play().catch(e => console.log("Sound play failed:", e));
 }
@@ -178,6 +182,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 let player="", room="", hasGuessed=false, guessCount=0, minRange=1, maxRange=100;
 
+// DOM Elements
 const gameDiv   = document.getElementById("game");
 const loadingDiv = document.getElementById("loading");
 const roomNameDisplay = document.getElementById("roomNameDisplay");
@@ -372,7 +377,6 @@ async function guessNum(){
         message = `ชนะรอบนี้ (${newWins}/${ROUNDS_TO_WIN}) - เริ่มรอบใหม่ เลขสุ่มแล้ว!`;
         push(ref(db,"rooms/"+room+"/chat"),{n:"SERVER",m:`${player} ${message}`});
         
-        // Reset local state for next round start
         resetLocalState();
         result.innerText = `ถูกแล้ว! เริ่มรอบ ${newWins + 1}`;
     }
@@ -390,22 +394,18 @@ function updateGuessInfo(){
     const remaining = MAX_GUESSES - guessCount;
     guessInfoDiv.innerHTML = `ทายเลข <b>${minRange}</b> ถึง <b>${maxRange}</b><br> (${remaining > 0 ? remaining : 0} ครั้งที่เหลือ)`;
     
+    const isDisabled = hasGuessed || guessCount >= MAX_GUESSES || newGameBtn.style.display !== "none";
+    
     if(guessCount >= MAX_GUESSES && !hasGuessed){
         guessInfoDiv.innerHTML += `<br><span style="color:#ff4444;">หมดโอกาสเดาแล้ว!</span>`;
-        guessBtn.disabled = true;
-        guessI.disabled = true;
     } else if (hasGuessed && newGameBtn.style.display === "none") {
         guessInfoDiv.innerHTML = `✅ คุณเดาถูกแล้ว! รอเลขใหม่ถูกสุ่ม...`;
-        guessBtn.disabled = true;
-        guessI.disabled = true;
     } else if (newGameBtn.style.display !== "none") {
         guessInfoDiv.innerHTML = `✅ เกมจบแล้ว!`;
-        guessBtn.disabled = true;
-        guessI.disabled = true;
-    } else {
-        guessBtn.disabled = false;
-        guessI.disabled = false;
-    }
+    } 
+
+    guessBtn.disabled = isDisabled;
+    guessI.disabled = isDisabled;
 }
 
 function sendMsg(){
@@ -418,7 +418,6 @@ function sendMsg(){
 
 function copyInviteLink(){
     playClick(); 
-    // แก้ไข: ใช้ 'https://' โดยตรงตามคำขอ
     const link = `https://${window.location.host}/index.html?room=${room}`;
 
     if (navigator.clipboard && window.isSecureContext) {
