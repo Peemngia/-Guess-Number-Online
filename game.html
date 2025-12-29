@@ -32,6 +32,7 @@ input,button{
   border:none;
   border-radius:10px;
   font-size:16px;
+  transition: all 0.15s ease;
 }
 button{font-weight:bold;cursor:pointer}
 .green{background:#00ff88;color:#000}
@@ -46,6 +47,22 @@ button{font-weight:bold;cursor:pointer}
   overflow:auto;
 }
 hr{border:0;border-top:1px solid #333;margin:15px 0}
+
+/* Hover and Active Effects */
+button:not([disabled]):hover {
+    filter: brightness(1.15); 
+    transform: translateY(-1px);
+}
+button:not([disabled]):active {
+    filter: brightness(0.9);
+    transform: translateY(1px);
+    box-shadow: none;
+}
+button[disabled] {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+/* END Effects */
 
 #inviteBtn{
     background: #4444ff;
@@ -123,21 +140,19 @@ hr{border:0;border-top:1px solid #333;margin:15px 0}
 
 <audio id="clickSound" src="computer-mouse-click-352734.mp3" preload="auto"></audio> 
 <audio id="guessSound" src="guess.mp3" preload="auto"></audio>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, set, get, push, onValue, update, remove }
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// *** Firebase Config ที่ถูกต้องของคุณ ***
+// *** Firebase Config ที่ถูกต้องของคุณ (ต้องเปลี่ยน) ***
 const firebaseConfig = {
-  apiKey: "AIzaSyDRlB6q1NJeSnO4JsLQcUHr28XGKo573sk",
-  authDomain: "peem-dc962.firebaseapp.com",
-  databaseURL: "https://peem-dc962-default-rtdb.firebaseio.com",
-  projectId: "peem-dc962",
-  storageBucket: "peem-dc962.firebasestorage.app",
-  messagingSenderId: "1021248731842",
-  appId: "1:1021248731842:web:155602dc9d8b2b2b78595b",
-  measurementId: "G-WLK08GX4EL"
+  apiKey: "API_KEY_ของมึง",
+  authDomain: "PROJECT.firebaseapp.com",
+  databaseURL: "https://PROJECT-default-rtdb.firebaseio.com",
+  projectId: "PROJECT"
+  // ... (ค่าอื่นๆ)
 };
 
 const app = initializeApp(firebaseConfig);
@@ -153,6 +168,7 @@ function playClick() {
     document.getElementById("clickSound").play().catch(e => console.log("Sound play failed:", e));
 }
 function playGuessSound() {
+    // ใช้เสียง guess.mp3 (หากไม่มีไฟล์นี้จริง อาจไม่มีเสียง)
     document.getElementById("guessSound").currentTime = 0;
     document.getElementById("guessSound").play().catch(e => console.log("Sound play failed:", e));
 }
@@ -402,7 +418,8 @@ function sendMsg(){
 
 function copyInviteLink(){
     playClick(); 
-    const link = `${window.location.protocol}//${window.location.host}/index.html?room=${room}`;
+    // แก้ไข: ใช้ 'https://' โดยตรงตามคำขอ
+    const link = `https://${window.location.host}/index.html?room=${room}`;
 
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(link)
