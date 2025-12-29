@@ -32,11 +32,25 @@ input,button{
   border:none;
   border-radius:10px;
   font-size:16px;
+  transition: all 0.15s ease;
 }
 button{font-weight:bold;cursor:pointer}
 .green{background:#00ff88;color:#000}
 .blue{background:#00ffff;color:#000}
 .red{background:#ff4444;color:#fff} 
+
+/* Hover and Active Effects */
+button:hover {
+    filter: brightness(1.15); 
+    transform: translateY(-1px);
+}
+button:active {
+    filter: brightness(0.9);
+    transform: translateY(1px);
+    box-shadow: none;
+}
+/* END Effects */
+
 .box{
   background:#000;
   padding:10px;
@@ -80,10 +94,11 @@ hr{border:0;border-top:1px solid #333;margin:15px 0}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, set, get, push, update, remove }
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+import { getDatabase, ref, set, get, push, update }
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-// *** Firebase Config ที่ถูกต้องของคุณ ***
+// *** Firebase Config ที่ถูกต้องของคุณ (ถูกใส่ค่าแล้ว) ***
 const firebaseConfig = {
   apiKey: "AIzaSyDRlB6q1NJeSnO4JsLQcUHr28XGKo573sk",
   authDomain: "peem-dc962.firebaseapp.com",
@@ -96,6 +111,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 const db = getDatabase(app);
 
 // Sound Function
@@ -142,7 +158,6 @@ function goToGame(playerName, roomName){
     window.location.href = `game.html?room=${roomName}&player=${playerName}`;
 }
 
-/* ➕ สร้างห้อง */
 async function createRoom(){
   playClick(); 
   const player = nameI.value.trim();
@@ -171,18 +186,16 @@ async function createRoom(){
       host: player 
     });
     
-    // บันทึกผู้เล่นออนไลน์ (สำหรับ Admin Kick)
     await set(ref(db, "playersOnline/" + player), { room: room });
 
     goToGame(player, room);
 
   } catch(error) {
     console.error("Firebase Error (Create Room):", error);
-    alert("สร้างห้องไม่สำเร็จ! ตรวจสอบ Firebase Rules หรือ Config!");
+    alert(`สร้างห้องไม่สำเร็จ! ข้อผิดพลาด: ${error.message} (ส่วนใหญ่มักเป็นเพราะ Firebase Rules ไม่อนุญาตให้เขียน)`);
   }
 }
 
-/* ➡️ เข้าห้อง */
 async function joinRoom(){
   playClick(); 
   const player = nameI.value.trim();
@@ -208,18 +221,16 @@ async function joinRoom(){
 
     await set(ref(db,"rooms/"+room+"/players/"+player), true);
     
-    // บันทึกผู้เล่นออนไลน์ (สำหรับ Admin Kick)
     await set(ref(db, "playersOnline/" + player), { room: room });
 
     goToGame(player, room);
     
   } catch(error) {
     console.error("Firebase Error (Join Room):", error);
-    alert("เข้าห้องไม่สำเร็จ! ตรวจสอบ Firebase Rules หรือ Config!");
+    alert(`เข้าห้องไม่สำเร็จ! ข้อผิดพลาด: ${error.message} (ส่วนใหญ่มักเป็นเพราะ Firebase Rules ไม่อนุญาตให้เขียน)`);
   }
 }
 
-/* 🔍 ค้นหาผู้เล่น */
 async function searchPlayer(){
     playClick(); 
     const searchName = playerSearchInput.value.trim().toLowerCase();
@@ -266,7 +277,6 @@ async function searchPlayer(){
     }
 }
 
-/* 🔍 ค้นหาห้อง */
 async function searchRoom(){
     playClick(); 
     const searchRoomName = roomSearchInput.value.trim().toLowerCase();
@@ -290,7 +300,7 @@ async function searchRoom(){
                 if (roomKey.toLowerCase().includes(searchRoomName)) { 
                     const roomData = roomSnap.val();
                     const players = roomData.players || {};
-                    const host = roomData.host || 'ไม่ระระบุ';
+                    const host = roomData.host || 'ไม่ระบุ';
                     const playerCount = Object.keys(players).length;
                     const passwordStatus = roomData.password ? '🔑 มีรหัส' : '🔓 ไม่มีรหัส';
 
